@@ -32,7 +32,26 @@ uvicorn app.main:app --host 0.0.0.0 --port 8432
 curl -sS http://127.0.0.1:8432/api/system/health
 ```
 
-服务订单运营接口使用 `/api/compute` 前缀，身份、角色、审计和系统接口分别位于 `/api/auth`、`/api/roles`、`/api/audit` 与 `/api/system`。
+服务订单运营接口使用 `/api/compute` 前缀，婚庆套餐版本与订单冻结接口使用 `/api/ceremony` 前缀，身份、角色、审计和系统接口分别位于 `/api/auth`、`/api/roles`、`/api/audit` 与 `/api/system`。
+
+## 婚庆套餐版本与订单冻结
+
+套餐固定包含场地布置、摄影、司仪、餐饮四类服务。顾问每次调整都会生成**不可变版本快照**（含变更原因、操作者、父版本与内容摘要），订单确认后会把所引用的版本与价格**冻结**到订单上，供应商事后改价或换人都不会改变已确认订单的承诺内容。
+
+- `POST /api/ceremony/packages?actor=` 建立套餐
+- `POST /api/ceremony/packages/{code}/versions?actor=` 基于当前（或指定）版本创建草稿快照，需给 `change_reason`
+- `POST /api/ceremony/packages/{code}/versions/{n}/publish?actor=` 发布版本，旧的生效版本自动置为 `superseded`
+- `GET /api/ceremony/packages/{code}/versions`、`.../versions/{n}` 查询版本与快照
+- `GET /api/ceremony/packages/{code}/compare?from=1&to=2` 逐字段比较两个版本，返回差异明细与价格差异摘要
+- `POST /api/ceremony/packages/{code}/versions/{n}/withdraw?actor=` 撤回**尚未被任何订单使用**的版本
+- `GET /api/ceremony/packages/{code}/history` 查看套餐版本审计记录
+- `POST /api/ceremony/orders?actor=` 建立草稿订单（可带 `expected_version`）
+- `PUT /api/ceremony/orders/{id}/expected-version?actor=` 草稿订单改挂版本（确认后禁止）
+- `POST /api/ceremony/orders/confirm?actor=` 确认订单并冻结当前生效版本；若携带的 `expected_version` 已过期（并发期间发布了新版本）返回 409 冲突并给出最新版本号
+- `GET /api/ceremony/orders/{id}`、`/api/ceremony/orders/by-no/{no}` 查询订单，响应包含生效版本快照 `effective_version`、当前版本号与 `diff_summary` 差异摘要
+- `GET /api/ceremony/orders/{id}/history` 查看订单审计记录
+
+版本关系（父子链、状态）与审计事件全部落库，服务重启后仍可完整恢复。
 
 ## 测试与编译检查
 
@@ -52,6 +71,7 @@ python -m app.cli compute-demo
 
 ```text
 app/compute/       任务模板、配额、提交、领取、回执和人工干预
+app/ceremony/      婚庆套餐不可变版本、版本比较/撤回与订单版本冻结
 app/api/            登录、角色、审计和系统管理接口
 app/core/           时钟、安全、异常和分页能力
 app/repositories/   SQLite 查询与事务封装

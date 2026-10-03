@@ -293,6 +293,71 @@ CREATE TABLE IF NOT EXISTS compute_interventions (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_compute_interventions_task ON compute_interventions(task_id,id);
+
+CREATE TABLE IF NOT EXISTS ceremony_packages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ceremony_package_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    package_id INTEGER NOT NULL REFERENCES ceremony_packages(id) ON DELETE RESTRICT,
+    version INTEGER NOT NULL,
+    parent_version_id INTEGER REFERENCES ceremony_package_versions(id),
+    content_json TEXT NOT NULL,
+    content_digest TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','superseded','withdrawn')),
+    change_reason TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    published_at TEXT,
+    withdrawn_at TEXT,
+    withdrawn_by TEXT NOT NULL DEFAULT '',
+    withdraw_reason TEXT NOT NULL DEFAULT '',
+    UNIQUE(package_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_ceremony_versions_package ON ceremony_package_versions(package_id,version);
+CREATE TABLE IF NOT EXISTS ceremony_package_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    package_id INTEGER NOT NULL REFERENCES ceremony_packages(id) ON DELETE CASCADE,
+    version_id INTEGER,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    before_json TEXT NOT NULL DEFAULT '{}',
+    after_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ceremony_package_events ON ceremony_package_events(package_id,id);
+CREATE TABLE IF NOT EXISTS ceremony_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_no TEXT NOT NULL UNIQUE,
+    package_id INTEGER NOT NULL REFERENCES ceremony_packages(id) ON DELETE RESTRICT,
+    package_version_id INTEGER REFERENCES ceremony_package_versions(id) ON DELETE RESTRICT,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','confirmed','cancelled')),
+    expected_version_id INTEGER,
+    total_price_cents INTEGER,
+    confirmed_by TEXT NOT NULL DEFAULT '',
+    confirmed_at TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ceremony_orders_package ON ceremony_orders(package_id);
+CREATE TABLE IF NOT EXISTS ceremony_order_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES ceremony_orders(id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    before_json TEXT NOT NULL DEFAULT '{}',
+    after_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ceremony_order_events ON ceremony_order_events(order_id,id);
 '''
 
 PERMISSIONS = [
